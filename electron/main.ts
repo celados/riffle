@@ -420,10 +420,8 @@ async function performNativeRequest(
   if (process.env.RIFFLE_TEST_TRASH_FAILURE === "1") {
     throw new Error("The operating system rejected the Trash operation.");
   }
-  const [root, path] = await Promise.all([
-    realpath(request.root),
-    realpath(request.path),
-  ]);
+  const root = await realpath(request.root);
+  const path = resolve(request.path);
   const offset = relative(root, path);
   if (
     offset === "" ||
@@ -433,6 +431,9 @@ async function performNativeRequest(
   ) {
     throw new Error("Riffle Desktop rejected a Trash target outside the Vault.");
   }
+  // The lexical path is the authorization boundary: a Vault directory link
+  // deliberately grants access to its target while keeping the link itself trashable.
+  await realpath(path);
   await shell.trashItem(path);
   return null;
 }

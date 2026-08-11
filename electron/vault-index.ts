@@ -6,7 +6,7 @@ import {
   type SearchResult,
   type WatchEvent,
 } from "@celados/fff-node";
-import { lstat } from "node:fs/promises";
+import { lstat, stat } from "node:fs/promises";
 import { basename, relative, sep } from "node:path";
 import type { SearchHit, Theme, TreeNode, VaultSnapshot } from "../src/lib/types";
 import { reconcileManagedIgnore } from "./managed-ignore";
@@ -107,7 +107,7 @@ export class VaultIndex {
       frecencyDbPath: options.frecencyDbPath,
       disableMmapCache: true,
       disableContentIndexing: false,
-      followSymlinks: false,
+      followSymlinks: true,
     });
     if (!created.ok) throw new Error(`FFF initialization failed: ${created.error}`);
 
@@ -130,6 +130,10 @@ export class VaultIndex {
   async snapshot(): Promise<VaultSnapshot> {
     this.#assertAvailable();
     return this.#snapshot();
+  }
+  hasEntry(rel: string): boolean {
+    this.#assertAvailable();
+    return this.#entries.has(normalizeFffRel(rel));
   }
 
   searchNotes(query: string, limit: number): SearchHit[] {
@@ -369,10 +373,20 @@ export class VaultIndex {
       }
       throw error;
     }
-    const kind = metadata.isSymbolicLink()
+    let isDirectory = metadata.isDirectory();
+    if (metadata.isSymbolicLink()) {
+      try {
+        isDirectory = (await stat(path)).isDirectory();
+      } catch (error) {
+        if (isNotFound(error)) {
+          this.#removeEntry(rel, changes);
+          return;
+        }
+        throw error;
+      }
+    }
+    const kind = isDirectory ? "folder" : metadata.isSymbolicLink()
       ? null
-      : metadata.isDirectory()
-      ? "folder"
       : rel.endsWith(".md")
       ? "note"
       : null;

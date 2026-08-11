@@ -5,9 +5,9 @@ description: >
   用 Electron 原生进程模型替换 Tauri 基座，以隔离的 Vault Engine、fff 驱动的 Vault Index、
   @pierre/trees 文件树和窄 preload interface 重构 Riffle，而不是逐项翻译旧 Tauri commands。
 status: accepted # draft | accepted | superseded
-version: 0.4
+version: 0.5
 implemented: 2026-08-04
-generated: { by: codex/gpt-5.6, at: 2026-08-04T01:00:00+08:00 }
+generated: { by: codex/gpt-5.6, at: 2026-08-11T16:00:00+08:00 }
 supersedes: ./port-plan.md#objective-and-boundary
 tags: [riffle, electron, architecture, migration, fff, octane, reliability]
 ---
@@ -251,13 +251,20 @@ lifecycle states. A failed index may be rebuilt; it is never the durable source 
 
 Initial and replacement snapshots use fff's atomic resident-entry enumeration: one native read lock and an O(N)
 copy, without search ranking, sorting, pagination, or a second filesystem scan. New Note creation asks the same
-retained matcher whether the not-yet-created relative path is accepted before the exclusive write. The hard path
-policy still validates the candidate and every existing ancestor first; ignore matching is not a symlink security
-boundary. With symlink following disabled, fff and Riffle's watch ingestion reject symlink leaves and ancestors so
-initial, watch, and mutation paths share one fail-closed accepted set.
+retained matcher whether the not-yet-created relative path is accepted before the exclusive write. Directory
+symlinks are transparent logical mounts: Snapshot, search, Pins and relative paths preserve the Vault-relative
+alias while filesystem reads, writes and full-path resolution reach the physical target. fff detects directory
+cycles, watches external targets, and maps physical events back to the logical alias so initial, live and mutation
+paths share one accepted set. Symlinked Note leaves remain rejected. `.markd/`, assets and export destinations retain
+their stricter no-symlink policies.
 
-The Node integration is pinned to `@celados/fff-node@0.10.2-nightly.8a9a970`, whose atomic resident-entry,
-preflight ignore, symlink, and initial/live folder contracts pass the Riffle gates. It uses `ffi-rs` to load the
+Renaming or trashing the directory symlink itself operates on the link; operations below it affect the target.
+A move between different filesystem volumes fails with `CROSS_DEVICE_MOVE_UNSUPPORTED` before changing the source;
+Riffle does not claim an atomic cross-volume move or use a copy-delete fallback.
+
+The Node integration uses the exact `@celados/fff-node` and platform-binary version in `package.json`. A release
+that enables directory symlinks must first pin a version whose atomic resident-entry, preflight ignore, cycle-safe
+directory-symlink, and physical-to-logical live watcher contracts pass the Riffle gates. It uses `ffi-rs` to load the
 fff C `cdylib`; platform binaries are
 exact optional dependencies with authoritative
 `os`/`cpu` metadata, so a clean consumer installs only the package matching its architecture. It is not treated as

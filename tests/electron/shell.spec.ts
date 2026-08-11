@@ -584,13 +584,34 @@ test("real Vault Engine and native shell complete the first Vault slice", async 
       ok: false,
       error: expect.objectContaining({ kind: "INVALID_PATH" }),
     });
+    const linkedNotes = join(scratch, "linked-notes");
+    await mkdir(linkedNotes);
+    await writeFile(join(linkedNotes, "Existing linked.md"), "linked");
+    await symlink(linkedNotes, join(chosenVault, "Linked"));
+    await expect.poll(() =>
+      page.evaluate(() => window.riffle!.vault.readNote("Linked/Existing linked.md"))
+    ).toEqual({ ok: true, value: "linked" });
+
+    await writeFile(join(linkedNotes, "Added.md"), "added");
+    await expect.poll(() =>
+      page.evaluate(() => window.riffle!.vault.readNote("Linked/Added.md"))
+    ).toEqual({ ok: true, value: "added" });
+    expect(
+      await page.evaluate(() => window.riffle!.vault.writeNote("Linked/Added.md", "edited", "added")),
+    ).toEqual({ ok: true, value: "edited" });
+    expect(await readFile(join(linkedNotes, "Added.md"), "utf8")).toBe("edited");
+    expect(await page.evaluate(() => window.riffle!.vault.moveToTrash("Linked/Added.md")))
+      .toEqual({ ok: true, value: expect.objectContaining({ snapshot: expect.any(Object) }) });
+    await expect(readFile(join(linkedNotes, "Added.md"), "utf8")).rejects.toEqual(
+      expect.objectContaining({ code: "ENOENT" }),
+    );
+
     await mkdir(join(chosenVault, "Real"));
     await writeFile(join(chosenVault, "Real", "Inside.md"), "inside");
     await symlink("Real/Inside.md", join(chosenVault, "Alias.md"));
-    await symlink("Real", join(chosenVault, "AliasFolder"));
     await mkdir(join(chosenVault, "notes", "node_modules"), { recursive: true });
     await writeFile(join(chosenVault, "notes", "node_modules", "Invisible.md"), "invisible");
-    for (const rel of ["Alias.md", "AliasFolder/Inside.md", "notes/node_modules/Invisible.md"]) {
+    for (const rel of ["Alias.md", "notes/node_modules/Invisible.md"]) {
       expect(await page.evaluate((path) => window.riffle!.vault.readNote(path), rel)).toEqual({
         ok: false,
         error: expect.objectContaining({ kind: "INVALID_PATH" }),

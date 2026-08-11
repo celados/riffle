@@ -48,6 +48,7 @@ type AppConfig = {
 };
 
 type ConfigCommit = (path: string, content: string) => Promise<void>;
+type RenamePath = (source: string, target: string) => Promise<void>;
 
 type CaptureAppendProvenance = {
   events: Array<{
@@ -77,6 +78,7 @@ export class VaultEngine {
   readonly #frecencyDbRoot: string;
   readonly #native: NativeVaultOperations;
   readonly #commitConfig: ConfigCommit;
+  readonly #renamePath: RenamePath;
   readonly #collections = new CollectionsEngine();
   readonly #captureAppends = new Map<string, CaptureAppendProvenance>();
   readonly #onIndexEvent: (event: VaultIndexEvent) => void;
@@ -96,11 +98,13 @@ export class VaultEngine {
     onIndexEvent: (event: VaultIndexEvent) => void = () => {},
     commitConfig: ConfigCommit = atomicWriteText,
     onFatal: (error: VaultEngineError) => void = () => {},
+    renamePath: RenamePath = rename,
   ) {
     this.#configFile = join(configDir, "config.json");
     this.#frecencyDbRoot = join(configDir, "fff-frecency");
     this.#native = native;
     this.#commitConfig = commitConfig;
+    this.#renamePath = renamePath;
     this.#onIndexEvent = onIndexEvent;
     this.#onFatal = onFatal;
   }
@@ -430,8 +434,14 @@ export class VaultEngine {
   async moveEntry(rel: string, dir: string): Promise<{ rel: string; snapshot: VaultSnapshot }> {
     const path = await this.#existingPath(rel, "entry");
     const targetDir = await this.#existingPath(dir, "folder");
-    if ((await stat(path)).isDirectory() && isWithin(path, targetDir)) {
-      throw domainError("INVALID_INPUT", "A folder cannot be moved into itself.");
+    if ((await stat(path)).isDirectory()) {
+      const [physicalPath, physicalTargetDir] = await Promise.all([
+        realpath(path),
+        realpath(targetDir),
+      ]);
+      if (isWithin(physicalPath, physicalTargetDir)) {
+        throw domainError("INVALID_INPUT", "A folder cannot be moved into itself.");
+      }
     }
     if (dirname(path) === targetDir) return { rel, snapshot: await this.snapshot() };
     const extension = path.endsWith(".md") ? ".md" : "";
@@ -602,7 +612,7 @@ export class VaultEngine {
   }
 
   async resolveNotePath(rel: string): Promise<string> {
-    return this.#existingPath(rel, "note");
+    return realpath(await this.#existingPath(rel, "note"));
   }
 
   getTheme(): Theme {
@@ -681,10 +691,13 @@ export class VaultEngine {
     } catch {
       throw domainError("NOT_FOUND", `Vault entry does not exist: ${rel}`);
     }
-    if (normalize(candidate) !== normalize(canonical)) {
+    if (
+      rel !== "" &&
+      normalize(candidate) !== normalize(canonical) &&
+      !this.#requireIndex().hasEntry(rel)
+    ) {
       throw domainError("INVALID_PATH", `Invalid Vault path: ${rel}`);
     }
-    assertInside(root, canonical, rel);
     const metadata = await stat(canonical);
     const valid =
       expected === "entry" ||
@@ -693,7 +706,7 @@ export class VaultEngine {
       (expected === "folder" && metadata.isDirectory()) ||
       (expected === "note" && metadata.isFile() && canonical.endsWith(".md"));
     if (!valid) throw domainError("INVALID_PATH", `Invalid Vault path: ${rel}`);
-    return canonical;
+    return candidate;
   }
 
   async #readPins(): Promise<string[]> {
@@ -736,7 +749,17 @@ export class VaultEngine {
     if (!index.acceptsPath(to)) {
       throw domainError("IGNORED_PATH", `The Vault ignore policy excludes ${to}.`);
     }
-    await rename(path, target);
+    try {
+      await this.#renamePath(path, target);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EXDEV") {
+        throw domainError(
+          "CROSS_DEVICE_MOVE_UNSUPPORTED",
+          "Riffle cannot move Vault entries across filesystem volumes.",
+        );
+      }
+      throw error;
+    }
     this.#invalidateCaptureAppendsUnder(path);
     await this.#remapPins(from, to);
     await index.rescan();

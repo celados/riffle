@@ -49,34 +49,65 @@ describe("Vault Engine path policy", () => {
     },
   );
 
-  test("rejects symlinked leaves and ancestors even when they stay inside the Vault", async () => {
-    const trashCalls: string[] = [];
-    const { engine, root } = await setupEngine(trashCalls);
-    await mkdir(join(root, "Real"));
-    await writeFile(join(root, "Real", "Inside.md"), "inside");
-    await symlink("Real/Inside.md", join(root, "Alias.md"));
-    await symlink("Real", join(root, "AliasFolder"));
+  test("follows directory symlinks but rejects symlinked Note leaves", async () => {
+    const { engine, root, scratch } = await setupEngine([], async (vaultRoot) => {
+      const outside = join(vaultRoot, "..", "linked-notes");
+      await mkdir(outside);
+      await writeFile(join(outside, "Outside.md"), "outside");
+      await symlink(join(outside, "Outside.md"), join(vaultRoot, "Alias.md"));
+      await symlink(outside, join(vaultRoot, "ExternalFolder"));
+    });
 
     await expect(engine.readNote("Alias.md")).rejects.toEqual(
       expect.objectContaining({ kind: "INVALID_PATH" }),
     );
-    await expect(engine.readNote("AliasFolder/Inside.md")).rejects.toEqual(
-      expect.objectContaining({ kind: "INVALID_PATH" }),
+    await expect(engine.readNote("ExternalFolder/Outside.md")).resolves.toBe("outside");
+
+    const created = await engine.createNote("ExternalFolder", "Created", "created");
+    expect(created.rel).toBe("ExternalFolder/Created.md");
+    expect(await readFile(join(scratch, "linked-notes", "Created.md"), "utf8")).toBe("created");
+    expect(await engine.resolveNotePath(created.rel)).toBe(
+      await realpath(join(scratch, "linked-notes", "Created.md")),
     );
-    await expect(engine.moveToTrash("Alias.md")).rejects.toEqual(
-      expect.objectContaining({ kind: "INVALID_PATH" }),
-    );
-    expect(trashCalls).toEqual([]);
   });
 
-  test("rejects a symlink that escapes the Vault", async () => {
-    const { engine, root, scratch } = await setupEngine();
-    const outside = join(scratch, "Outside.md");
-    await writeFile(outside, "outside");
-    await symlink(outside, join(root, "Escape.md"));
+  test("trashing a directory symlink removes the link, not its target", async () => {
+    const { engine, root, scratch } = await setupEngine([], async (vaultRoot) => {
+      const outside = join(vaultRoot, "..", "linked-notes");
+      await mkdir(outside);
+      await writeFile(join(outside, "Keep.md"), "keep");
+      await symlink(outside, join(vaultRoot, "ExternalFolder"));
+    });
 
-    await expect(engine.readNote("Escape.md")).rejects.toEqual(
-      expect.objectContaining({ kind: "INVALID_PATH" }),
+    await engine.moveToTrash("ExternalFolder");
+
+    await expect(readFile(join(root, "ExternalFolder", "Keep.md"), "utf8")).rejects.toEqual(
+      expect.objectContaining({ code: "ENOENT" }),
+    );
+    expect(await readFile(join(scratch, "linked-notes", "Keep.md"), "utf8")).toBe("keep");
+  });
+
+
+  test("leaves the source unchanged when a move crosses filesystem volumes", async () => {
+    const crossDevice = Object.assign(new Error("cross-device move"), { code: "EXDEV" });
+    const { engine, root } = await setupEngine(
+      [],
+      async (vaultRoot) => {
+        await mkdir(join(vaultRoot, "Source"));
+        await mkdir(join(vaultRoot, "Destination"));
+        await writeFile(join(vaultRoot, "Source", "Note.md"), "note");
+      },
+      async () => {
+        throw crossDevice;
+      },
+    );
+
+    await expect(engine.moveEntry("Source/Note.md", "Destination")).rejects.toEqual(
+      expect.objectContaining({ kind: "CROSS_DEVICE_MOVE_UNSUPPORTED" }),
+    );
+    expect(await readFile(join(root, "Source", "Note.md"), "utf8")).toBe("note");
+    await expect(readFile(join(root, "Destination", "Note.md"), "utf8")).rejects.toEqual(
+      expect.objectContaining({ code: "ENOENT" }),
     );
   });
 
@@ -556,6 +587,7 @@ describe("Vault Engine Quick Capture", () => {
 async function setupEngine(
   trashCalls: string[] = [],
   beforeOpen: (root: string) => Promise<void> = async () => {},
+  renamePath?: NonNullable<ConstructorParameters<typeof VaultEngine>[5]>,
 ) {
   const scratch = await mkdtemp(join(tmpdir(), "riffle-vault-engine-"));
   scratchPaths.push(scratch);
@@ -563,20 +595,28 @@ async function setupEngine(
   const config = join(scratch, "config");
   await mkdir(root);
   await beforeOpen(root);
-  const engine = new VaultEngine(config, {
-    moveToTrash: async (_vaultRoot, path) => {
-      trashCalls.push(path);
-      await rm(path, { recursive: true });
+  const engine = new VaultEngine(
+    config,
+    {
+      moveToTrash: async (_vaultRoot, path) => {
+        trashCalls.push(path);
+        await rm(path, { recursive: true });
+      },
+      stageAssetRoot: async () => "stage",
+      commitAssetRoot: async () => undefined,
+      rollbackAssetRoot: async () => undefined,
+      saveExport: async () => null,
     },
-    stageAssetRoot: async () => "stage",
-    commitAssetRoot: async () => undefined,
-    rollbackAssetRoot: async () => undefined,
-    saveExport: async () => null,
-  });
+    undefined,
+    undefined,
+    undefined,
+    renamePath,
+  );
   engines.push(engine);
   await engine.open(root, false);
   return { engine, root, scratch };
 }
+
 
 function fakeNative(
   overrides: Partial<ConstructorParameters<typeof VaultEngine>[1]> = {},

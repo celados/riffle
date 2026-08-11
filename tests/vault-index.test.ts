@@ -207,7 +207,7 @@ describe("fff-backed Vault Index", { timeout: VAULT_INDEX_TEST_TIMEOUT_MS }, () 
     expect(await flatten(index.snapshot().then((snapshot) => snapshot.tree))).toEqual([]);
   });
 
-  test("excludes symlink leaves and ancestors from the initial resident snapshot", async () => {
+  test("follows directory symlinks while excluding symlinked file leaves", async () => {
     const scratch = await createScratch();
     const root = join(scratch, "vault");
     const outside = join(scratch, "outside");
@@ -219,7 +219,10 @@ describe("fff-backed Vault Index", { timeout: VAULT_INDEX_TEST_TIMEOUT_MS }, () 
 
     const index = await VaultIndex.open(root, "system");
     indexes.push(index);
-    expect(await flatten(index.snapshot().then((snapshot) => snapshot.tree))).toEqual([]);
+    expect(await flatten(index.snapshot().then((snapshot) => snapshot.tree))).toEqual([
+      "AliasFolder/",
+      "AliasFolder/Outside.md",
+    ]);
   });
 
   test("copies every resident entry without a pagination boundary", async () => {

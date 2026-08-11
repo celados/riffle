@@ -38,3 +38,12 @@ status: active
   该版本。Riffle 不拥有 `usemarkd.app`，当前 Cloudflare 凭据可见的账户均不包含该 zone，因此
   不能把源码更新宣称为线上部署。只有产品域名 ownership 完成裁决、对应账户明确授权后，才能绑定并
   验证 Riffle 的公开网站；在此之前以公开 GitHub Release 作为正式下载入口。
+- Directory symlink support is implemented across local `fff` and Riffle sources and passes against the locally
+  rebuilt `libfff_c.dylib`, but the user chose not to publish a new FFF nightly. Before shipping Riffle, publish the
+  matching `@celados/fff-node` plus platform binaries, update the exact dependency and lockfile, then rerun the
+  Electron linked-folder journey. The currently published `0.10.2-nightly.dbc0f62` can scan linked folders initially
+  but does not keep external targets live.
+- zlob currently deduplicates followed directories globally by physical `(dev, ino)`. If two Vault symlinks point
+  to the same target, only one logical alias is indexed. Before releasing directory symlinks, add a dual-alias
+  regression and change cycle detection to track the current logical branch if the product contract keeps both
+  mounts visible; the current “transparent logical mounts” wording otherwise overstates the implementation.
