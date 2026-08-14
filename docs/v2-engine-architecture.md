@@ -792,6 +792,7 @@ These decisions block acceptance or the phase that names them:
 4. Retention bound for `change_log` and cursor expiry.
 5. Daemon idle policy when no client is connected; update handshake remains mandatory regardless.
 6. Which search workload, if any, justifies a Zig kernel after the SQL/TypeScript baseline is measured.
+7. Whether Registry stays filesystem-root-only, or later admits a Source abstraction for non-FS trees (sessions, Slack, …). Captured insight only; see [v2 multi-source notes](./v2-engine-architecture.notes.md). This item does not change current Vault or Phase 1 contracts.
 
 # Acceptance criteria
 
@@ -814,6 +815,7 @@ These decisions block acceptance or the phase that names them:
 - [Riffle domain language](../CONTEXT.md)
 - [Current Electron-native architecture](./electron-native-architecture.md)
 - [Annotation and comment-buffer proposal](./note-annotation-comment-buffer.md)
+- [Multi-source insight (open notes)](./v2-engine-architecture.notes.md)
 - [TanStack DB overview](https://tanstack.com/db/latest/docs/overview.md)
 - [TanStack DB mutations](https://tanstack.com/db/latest/docs/guides/mutations.md)
 - [Electron process model](https://www.electronjs.org/docs/latest/tutorial/process-model)
