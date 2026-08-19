@@ -8,6 +8,7 @@ status: completed
 version: 0.6
 timestamp: 2026-08-05T10:00:00+08:00
 resource: https://github.com/starc007/markd
+superseded_by: ./solid2-migration-plan.md
 tags: [octane, markd, tauri, tsrx, migration, reliability]
 ---
 

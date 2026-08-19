@@ -4,8 +4,9 @@ title: Markd primitives 到 Octane Base UI 的 capability matrix
 description: >
   对照 Markd 当前 UI contract、Base UI 1.6.0 官方 API 与 Octane Base UI port，冻结 P0 adoption
   的 owner、保留行为和验证重点。
-status: active
+status: superseded # Octane Base UI port 随 runtime 迁移作废；Solid 侧替代在 Phase 0 裁决
 version: 0.9
+superseded_by: ./solid2-migration-plan.md
 timestamp: 2026-08-05T10:00:00+08:00
 resource: https://base-ui.com/llms.txt
 tags: [octane, base-ui, markd, migration]

@@ -7,6 +7,7 @@ status: completed
 version: 0.7
 timestamp: 2026-08-05T10:00:00+08:00
 resource: ./tsrx-rewrite-plan.md
+superseded_by: ./solid2-migration-plan.md
 tags: [octane, markd, tsrx, manifest, migration]
 ---
 

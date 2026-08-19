@@ -6,6 +6,7 @@ status: completed
 version: 1.0
 timestamp: 2026-08-05T10:00:00+08:00
 resource: https://tsrx.dev/llms.txt
+superseded_by: ./solid2-migration-plan.md
 tags: [octane, tsrx, markd, migration]
 ---
 

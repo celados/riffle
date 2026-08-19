@@ -3,6 +3,13 @@
 Local-first markdown notes app for macOS. Electron is the only desktop shell and release path. The UI uses
 Octane + Vite + Tailwind v4. Comark powers the Readonly View; CodeMirror powers the Source Editor.
 
+## Runtime migration in flight
+
+Renderer runtime 已裁决迁移到 Solid 2（[ADR 0003](docs/adr/0003-adopt-solid-2-as-the-renderer-runtime.md)），
+执行计划见 [`docs/solid2-migration-plan.md`](docs/solid2-migration-plan.md)。**本文其余部分描述的仍是当前
+代码库，它现在是 Octane**——迁移尚未开始，不要按 Solid 语义读下面的内容或修改代码。计划的 Wave 0 会在
+同一个 commit 里切换工具链并重写本文。在此之前新增功能仍走 Octane，但先问一句它是否应该等 Wave 0。
+
 ## Project provenance
 
 Riffle is Celados' independent Octane/Electron continuation of

@@ -47,3 +47,14 @@ status: active
   to the same target, only one logical alias is indexed. Before releasing directory symlinks, add a dual-alias
   regression and change cycle detection to track the current logical branch if the product contract keeps both
   mounts visible; the current “transparent logical mounts” wording otherwise overstates the implementation.
+- Solid 2 迁移使两条 Octane 特定条目失去意义，保留在此仅为迁移期间的历史判据：`@octanejs/base-ui`
+  的 Menu/Menubar/ContextMenu adoption，以及 Octane TSRX key selector 无法捕获 component-local
+  `label` 的 workaround。前者的替代（Kobalte 或 Ark UI）在
+  [`docs/solid2-migration-plan.md`](../docs/solid2-migration-plan.md) 的 Phase 0 裁决；后者随 TSRX
+  一起退出，`ReadonlyShortcutRow` 的预计算 `{ key, id }` 在 Wave 5 重写时直接用 Solid 的 keyed
+  `<For>` 表达，不要移植 workaround。
+- `@octanejs/dnd-kit` 在 `package.json` 里但 `src/` 与 `electron/` 零引用。Phase 0 直接删依赖，
+  不要为它在 Solid 侧找对应物——现存候选 `@thisbeyond/solid-dnd` 自 2023-11 未更新，真需要拖拽时
+  重新评估。
+- Solid 2 目前是 `2.0.0-rc.0`，发布节奏约两天一版。迁移期间精确 pin、不跟版本；Wave 6 收敛后统一
+  评估一次升级。升级判据与登记要求见迁移计划的 RC churn policy。
