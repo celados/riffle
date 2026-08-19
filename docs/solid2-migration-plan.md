@@ -6,7 +6,7 @@ description: >
   Solid-1.x-era 依赖能否在 2.0 存活，再按 store → 叶子 → 功能簇 → 外壳的依赖方向
   逐 wave 重写 47 个 render 文件，并把 agent 的真相指针从 Octane 翻到 Solid 2 RFC。
 status: draft # draft | accepted | in-progress | completed
-version: 0.4
+version: 0.5
 generated: { by: claude-code/opus-5, at: '2026-08-19T00:00:00+08:00' }
 resource: ./adr/0003-adopt-solid-2-as-the-renderer-runtime.md
 supersedes:
@@ -136,9 +136,11 @@ stamping 移进 machine 的 connect props，正是 celados 给 1.x 提的
 [zag#3269](https://github.com/chakra-ui/zag/pull/3269) 被上游以「v2 会声明式处理」为由
 关闭的那处缺陷。在 1.43 上做等于把缺陷连同 workaround 一起继承。
 
-Ark 上游（`@ark-ui/solid@5.38.2`）仍在 zag 1.43 且没有 v2 分支，所以它这一轮是**词汇表
-参照**而非 codegen 输入：行为以 zag v2 的 connect API 为准，compound 结构与命名照 Ark 抄。
-首批的 class-(a) 声明表手写；Ark 出 v2 后再恢复 codegen。
+做法是 **fork `@ark-ui/solid` 全量升级**：把它的 966 个库文件（64 个组件）整体拿过来，
+升级到 Solid 2 + zag v2。扫描显示升级面高度集中——四个 choke-point 文件覆盖约 1200 个
+消费点，已删 API 的真实命中只有 `onMount` 5 处、`<Index>` 12 文件、`on(` 1 文件，
+其余已删 API 命中全为 0。升级分三轮：choke-point 手写 → ast-grep codemod（约 700 文件，
+已验证能精确区分 solid 的 `onMount` 调用和同名自定义 prop）→ agent 逐个判断（约 60 文件）。
 
 两条既定合同直接沿用，不重新讨论：
 
@@ -149,10 +151,9 @@ Ark 上游（`@ark-ui/solid@5.38.2`）仍在 zag 1.43 且没有 v2 分支，所�
 - **所有元素渲染走一个 `Part` frame**，由它统一持有 render 分支、presence gate、composed ref
   和 void-tag 处理；生成的声明只写 `tag` / `options` / `gate` 这些真正变化的部分。
 
-**首批只做 5 个机器**：dialog、popover、tooltip、menu、combobox。这是 Riffle 现在真正用到的
-面——`Input` 和 `Button` 在 Zag 里没有对应机器，Wave 2 直接写成原生元素，`@octanejs/base-ui`
-随之整个退出依赖表。ripple-ark 的 generator 覆盖 51 个组件，codegen 让后续扩面很便宜；
-现在就承诺全量 parity 会让这个 lib 变成整条迁移的关键路径。
+Riffle 用到的五个机器——dialog、popover、tooltip、menu、combobox——是 solid-ark 的
+**验证集**：它们优先过门禁，其余组件随 fork 一起升级但不阻塞交付。`Input` 和 `Button`
+在 Zag 里没有对应机器，Wave 2 直接写成原生元素，`@octanejs/base-ui` 随之整个退出依赖表。
 
 移植成本的分布沿用 ripple-ark 的 upstream-sync 分类法（见该仓库
 `.agents/skills/upstream-sync/SKILL.md`）：
@@ -168,7 +169,7 @@ Ark 上游（`@ark-ui/solid@5.38.2`）仍在 zag 1.43 且没有 v2 分支，所�
 `create-machine.ts` 和这套分类法是可复用资产；per-target 重写的是 emit 模板、
 binding-runtime 的框架接触面和 class-(b) override。
 
-完整的 project 设计（首批范围、v2 影响面、codegen 回归条件、双 pre-release 的 churn 政策）
+完整的 project 设计（扫描数据、三轮升级、render 转换契约、上游同步与 churn 政策）
 见 workspace `knowledge/solid-ark-project.md`。
 
 ## Wave 清单
@@ -209,8 +210,8 @@ oracle 见下节。沿用 [`tsrx-migration-manifest.md`](./tsrx-migration-manife
 收到的是 error accessor 加 reset action（`(err, reset) => ...`，读值要 `err()`），和现有 render prop
 不是一对一。这里的目的是让错误只有一条路径，包一层 shim 保住旧签名就把这个设计废掉了。
 `ContextMenu.tsx`、`Modal.tsx`、`Tooltip.tsx`、`popover-morph.tsx` 都**阻塞在 solid-ark 上**——
-首批 5 个机器不到位，Wave 2 只能推进不依赖 headless 的那部分。`Input`/`Button` 不受影响，
-它们变成原生元素。
+验证集的五个机器不到位，Wave 2 只能推进不依赖 headless 的那部分。`Input`/`Button` 不受
+影响，它们变成原生元素。
 
 **Wave 3 — 树与命令面板**（`components/tree/` 4 文件 + `components/palette/` 1 文件）
 
@@ -315,8 +316,8 @@ Solid 2 从 beta.15 到 rc.0 用了约五周、二十个版本，节奏是两天
 | Solid 1.x 生态包在 2.0 运行时坏掉 | Phase 0 每个候选的三选一结论 | 门禁不过不进 Wave 1 |
 | 机械翻译 hooks 产出「能跑但行为错」 | 35 条 browser journey 全量通过 | 每 wave 跑全量，不跑子集 |
 | agent 写出 1.x 语法且不报错 | skill + 真相指针 | Wave 0 先落地，早于任何组件改动 |
-| Solid headless 生态整体不支持 2.0 | Kobalte/solid-sonner 的 peer 直接排除 2.0 | 自建 solid-ark（zag v2），首批 5 机器 |
-| solid-ark 在 Wave 2/3 的关键路径上 | 首批 5 机器是否就绪 | 单人 lib 卡住整条迁移是真实风险；Wave 2 先做不依赖 headless 的部分，必要时缩到 3 个机器 |
+| Solid headless 生态整体不支持 2.0 | Kobalte/solid-sonner 的 peer 直接排除 2.0 | fork Ark 全量升级为 solid-ark（Solid 2 + zag v2） |
+| solid-ark 在 Wave 2/3 的关键路径上 | 验证集五个机器是否过门禁 | Wave 2 先做不依赖 headless 的部分；升级是全量 fork，验证按机器推进，不必等 64 个组件都绿 |
 | Tab CSS-toggle 语义被 `<Show>` 悄悄改成 remount | 切 tab 不重新解析 Markdown | Wave 4 的显式合同，加 journey 断言 |
 | RC 上游 churn 打断迁移 | 精确 pin + 不跟版本 | 见 RC churn policy |
 | 多 wave 并行撞 Playwright 固定端口 | 现有 backlog 条目 | 并行前先隔离端口 |
