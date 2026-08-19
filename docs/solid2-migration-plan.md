@@ -6,7 +6,7 @@ description: >
   Solid-1.x-era 依赖能否在 2.0 存活，再按 store → 叶子 → 功能簇 → 外壳的依赖方向
   逐 wave 重写 47 个 render 文件，并把 agent 的真相指针从 Octane 翻到 Solid 2 RFC。
 status: draft # draft | accepted | in-progress | completed
-version: 0.2
+version: 0.3
 generated: { by: claude-code/opus-5, at: '2026-08-19T00:00:00+08:00' }
 resource: ./adr/0003-adopt-solid-2-as-the-renderer-runtime.md
 supersedes:
@@ -77,25 +77,43 @@ Renderer runtime 换成 `solid-js@2.0.0-rc.0`，语法层写标准 Solid TSX。�
 
 **这一阶段不通过，不动任何产品代码。**
 
-上表里每一个 Solid 侧候选包都是为 Solid 1.x 写的。Solid 2 的 breaking change 会在**运行时**
-而不是安装时击穿它们：owned scope 内写 signal 直接 throw、顶层 reactive read 警告并丢失
-响应性、`batch` 已删除、`createResource` 已删除、`onMount` 换成 `onSettled`。一个库只要在
-内部用了这些模式，`npm install` 完全正常，行为却是坏的。
+### 生态候选：peer range 已经给出答案
 
-建一个独立的最小 Solid 2 RC 应用（不在 riffle 仓库内，用 `.scratch/`），逐个 import 候选包，
-每个跑通一条真实交互路径，记录结论：
+不需要逐个 spike。Solid 生态的 peer 声明直接排除 2.0：
 
-| 候选 | 必须证明 | 备选 |
+| 候选 | peer | 结论 |
 | --- | --- | --- |
-| `@tanstack/solid-query` | QueryClientProvider + 一次 invalidate 往返 | 直接用 async `createMemo` + `Loading`（2.0 原生能力，可能整个删掉这个依赖） |
-| `solid-sonner` | toast 在 owned scope 外触发 | 自建（Riffle 的 toast 用法很薄） |
-| `cmdk-solid` | CommandPalette 的过滤与键盘选择 | solid-ark 的 combobox |
-| `solid-motionone` | `AnimatePresence` 等价物、exit 动画 | 纯 CSS——Riffle 的动效合同只有 100–160ms ease-out，本来就窄 |
+| `@kobalte/core` | `^1.9.8` | 装不上 |
+| `solid-sonner` | `^1.6.0` | 装不上 |
+| `@tanstack/solid-query` | `^1.6.0` | 装不上 |
+| `solid-motionone` | `^1.8.0` | 装不上 |
+| `cmdk-solid` | `^1.8.0` | 装不上 |
+| `@ark-ui/solid` | `>=1.6.0` | 范围宽松但用了已删 API，见「Headless UI 自建」 |
+| `@zag-js/*` | **无 peer** | 框架无关，可用 |
 
-**门禁判据**：每个候选给出「可用 / 需 patch / 换方案」三选一的结论，且「需 patch」必须附
-最小复现。任何一项悬而未决就先解决它，不要带着未知进 Wave 1。
+Solid 2 上没有可直接消费的第三方 UI / 状态生态，替代路径全部是自建或框架无关库：
 
-`@octanejs/dnd-kit` 零使用，在 Phase 0 直接从 `package.json` 删除，不进入候选表。
+- toast：Riffle 用法很薄，自建。
+- 数据获取：`@tanstack/solid-query` 直接删掉——async `createMemo` + `Loading` 是 2.0 原生
+  能力，两个调用点不值得引一层。
+- 动效：纯 CSS。Riffle 的动效合同本来就只有 100–160ms ease-out。
+- command palette 与 headless：solid-ark。
+- `@octanejs/dnd-kit` 零使用，直接从 `package.json` 删除。
+
+### solid-zag 地基验证 — 已通过
+
+自建路线唯一的真实未知是「Zag 机器能不能在 Solid 2 上跑」。已验证：**能**。
+
+`.scratch/solid2-spike/` 把 `@zag-js/solid@1.43.1` 移植到 Solid 2 RC，dialog 与 menu 两台
+机器的完整交互链（trigger → transition → DOM）跑通，且 machine 建立过程零 strict-read
+警告。移植改动只有四处，全部记在该目录的 `SPIKE.md`：`onMount`/`mergeProps` 换名、
+`createEffect` 改两相形式、初始化期的 reactive 读显式 `untrack`、effect 回调不能有返回值。
+
+这份代码是 `@celados/solid-zag` 的第一版实现，repo 建立后直接搬——不要从上游重拷。
+未覆盖的是 presence（退出动画）、focus trap、嵌套机器（menu 的 submenu）和 SSR，
+它们属于 solid-ark 的 class-(b) 面。
+
+**门禁状态**：地基已过。Wave 1（状态层）可以开始——它不依赖 headless 层。
 
 ## Headless UI 自建
 

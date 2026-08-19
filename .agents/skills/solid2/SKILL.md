@@ -72,13 +72,21 @@ read does not track. Wrap it in `untrack` when you mean a one-time read, or move
 into `createMemo` / `createEffect` / a JSX expression when you mean it to be live.
 This includes destructuring props — `function C({ title })` loses reactivity.
 
+When the one-time read happens inside a third-party factory you call at setup, put the
+`untrack` around **your call site**, not around the getter it reaches. A getter that is
+later re-read inside a tracked scope must still subscribe.
+
 **The same applies inside control-flow callback bodies.** `<Show when={u()}>{(u) => ...}`
 callbacks build structure; a reactive read directly in the body won't update. Read
 through the returned JSX instead.
 
-**Effects have two phases.** `createEffect(compute, effect)` — the first argument only
-reads (dependencies are recorded), the second runs side effects after the flush. Don't
-cram reads and writes into one function.
+**Effects have two phases, and the one-argument form throws.** `createEffect(compute, effect)`
+— the first argument only reads (dependencies are recorded), the second runs side effects
+after the flush. Passing a single function fails with `MISSING_EFFECT_FN`; this is an error,
+not a warning.
+
+**The effect callback must return a cleanup function or nothing.** An arrow function's
+implicit return — `(v) => arr.push(v)` — throws `invalid cleanup value`. Use a block body.
 
 **Updates land on the next microtask.** After a setter, reads still return the old value
 until the batch flushes. When you must touch the DOM right after a state change — focus,
@@ -131,6 +139,12 @@ Concretely, when porting a component that came from a hooks-shaped runtime:
 
 Reading a prop is a live read every time. `props.value` inside JSX tracks; pulling it
 into a `const` at the top of the body freezes it.
+
+## Testing reactive behavior
+
+`await flush()` once is not enough when the change travels through a state machine or any
+chain that writes during its own settle. The DOM converges after the second flush; asserting
+after one reads stale values and looks like a broken subscription. Flush twice by default.
 
 ## Riffle-specific contracts
 
