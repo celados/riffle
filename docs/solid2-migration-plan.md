@@ -6,7 +6,7 @@ description: >
   Solid-1.x-era 依赖能否在 2.0 存活，再按 store → 叶子 → 功能簇 → 外壳的依赖方向
   逐 wave 重写 47 个 render 文件，并把 agent 的真相指针从 Octane 翻到 Solid 2 RFC。
 status: draft # draft | accepted | in-progress | completed
-version: 0.1
+version: 0.2
 generated: { by: claude-code/opus-5, at: '2026-08-19T00:00:00+08:00' }
 resource: ./adr/0003-adopt-solid-2-as-the-renderer-runtime.md
 supersedes:
@@ -51,7 +51,7 @@ Renderer runtime 换成 `solid-js@2.0.0-rc.0`，语法层写标准 Solid TSX。�
 | --- | --- | --- | --- |
 | 反应式语义 | Octane React-hooks，组件重跑 | Solid 2 signals，setup-once | **逐处重想**，343 个调用点 |
 | 状态容器 | `@octanejs/zustand`（8 store） | `createStore` / signals + `createRoot` | 重写；module singleton 需显式 owner |
-| Headless UI | `@octanejs/base-ui`（5 文件） | Kobalte 或 Ark UI | **无对应物**，API 形状不同 |
+| Headless UI | `@octanejs/base-ui`（5 文件） | 自建 `@celados/solid-zag` + `@celados/solid-ark` | 见「Headless UI 自建」 |
 | Motion | `@octanejs/motion`（15 文件） | `solid-motionone` | 上游 2025-04 起未更新 |
 | Toast | `@octanejs/sonner`（15 文件） | `solid-sonner` | 活跃（0.3.2 / 2026-08-16） |
 | 数据获取 | `@octanejs/tanstack-query`（2 文件） | `@tanstack/solid-query` | 活跃，但 Solid 2 兼容待验 |
@@ -88,15 +88,60 @@ Renderer runtime 换成 `solid-js@2.0.0-rc.0`，语法层写标准 Solid TSX。�
 | 候选 | 必须证明 | 备选 |
 | --- | --- | --- |
 | `@tanstack/solid-query` | QueryClientProvider + 一次 invalidate 往返 | 直接用 async `createMemo` + `Loading`（2.0 原生能力，可能整个删掉这个依赖） |
-| Kobalte vs Ark UI | Menu / ContextMenu / Dialog 的键盘导航、dismissal、focus restore | 二选一后写进 capability matrix |
 | `solid-sonner` | toast 在 owned scope 外触发 | 自建（Riffle 的 toast 用法很薄） |
-| `cmdk-solid` | CommandPalette 的过滤与键盘选择 | Kobalte/Ark 的 Combobox 自建 |
+| `cmdk-solid` | CommandPalette 的过滤与键盘选择 | solid-ark 的 combobox |
 | `solid-motionone` | `AnimatePresence` 等价物、exit 动画 | 纯 CSS——Riffle 的动效合同只有 100–160ms ease-out，本来就窄 |
 
 **门禁判据**：每个候选给出「可用 / 需 patch / 换方案」三选一的结论，且「需 patch」必须附
 最小复现。任何一项悬而未决就先解决它，不要带着未知进 Wave 1。
 
 `@octanejs/dnd-kit` 零使用，在 Phase 0 直接从 `package.json` 删除，不进入候选表。
+
+## Headless UI 自建
+
+Solid 的 headless 生态在 2.0 上不是「需要验证」，是**装不上**：`@kobalte/core` 的 peer 是
+`solid-js ^1.9.8`，`solid-sonner` 是 `^1.6.0`——两者都硬性排除 2.0。`@ark-ui/solid` 的
+`>=1.6.0` 只是范围碰巧宽松，不代表测过：它的库代码里 `onMount` 有真实调用（`use-fieldset.ts`、
+`menu-root.tsx`——后者正是 Riffle 需要的 menu），`<Index>` 有 12 个文件在用，这两个 API 在
+Solid 2 都不存在。
+
+所以 headless 层自建，分两个包，形状照搬
+`projects/ripple-ark`（同一套设计已在 Ripple 上跑通并发布到
+`npm.celados.com`）：
+
+- `@celados/solid-zag` — Zag core 的 Solid 2 绑定：`normalizeProps` + `useMachine`。
+- `@celados/solid-ark` — Ark 的 compound 组件词汇表（`Root`/`Trigger`/`Content`/context），
+  由 codegen 从 Ark 上游生成。
+
+两条既定合同直接沿用，不重新讨论：
+
+- **组合走 Base UI 的 function-form `render` prop，不做 asChild。** 不是风格偏好——asChild
+  依赖 React 的 element cloning，在 Solid 的求值模型下没有对应物。`render` 收到的是 part
+  合并后的活 props 对象，回调里读属性仍订阅机器状态，返回值整个替换默认元素。同时排除
+  `as` prop 和 element-form `render={<X />}`。
+- **所有元素渲染走一个 `Part` frame**，由它统一持有 render 分支、presence gate、composed ref
+  和 void-tag 处理；生成的声明只写 `tag` / `options` / `gate` 这些真正变化的部分。
+
+**首批只做 5 个机器**：dialog、popover、tooltip、menu、combobox。这是 Riffle 现在真正用到的
+面——`Input` 和 `Button` 在 Zag 里没有对应机器，Wave 2 直接写成原生元素，`@octanejs/base-ui`
+随之整个退出依赖表。ripple-ark 的 generator 覆盖 51 个组件，codegen 让后续扩面很便宜；
+现在就承诺全量 parity 会让这个 lib 变成整条迁移的关键路径。
+
+移植成本的分布沿用 ripple-ark 的 upstream-sync 分类法（见该仓库
+`.agents/skills/upstream-sync/SKILL.md`）：
+
+- **class (a) 声明式表面**（tag + zag getter + prop keys + context 链）几乎零成本转移，
+  换的只是 emit 模板。
+- **class (b) 命令式语义**（effect、嵌套机器、presence、派生 children）是真正的移植工作，
+  必须逐个手工重写——而且这正是上游 Solid 1.x 惯用法聚集的地方（`onMount`、`<Index>`、
+  `createEffect` 的旧形态），不能跨 target 复用 Ripple 版的 override。
+- **class (c) hook 层注入**（`id` / `dir` / `getRootNode`）是一份共享实现。
+
+生成器（`scripts/generate-bindings.ts`，1512 行）、`binding-runtime`（497 行）、
+`create-machine.ts` 和这套分类法是可复用资产；per-target 重写的是 emit 模板、
+binding-runtime 的框架接触面和 class-(b) override。
+
+Zag 版本先与 ripple-ark 对齐在 `^1.43.0`，除非有明确理由才独立升。
 
 ## Wave 清单
 
@@ -135,12 +180,16 @@ oracle 见下节。沿用 [`tsrx-migration-manifest.md`](./tsrx-migration-manife
 不是这个文件的替身。删掉自建实现，把它的调用点改成 `<Errored>`；注意 fallback 的 callback 形态
 收到的是 error accessor 加 reset action（`(err, reset) => ...`，读值要 `err()`），和现有 render prop
 不是一对一。这里的目的是让错误只有一条路径，包一层 shim 保住旧签名就把这个设计废掉了。
-`ContextMenu.tsx` 与 Base UI 决策绑定，跟着 Phase 0 的结论走。
+`ContextMenu.tsx`、`Modal.tsx`、`Tooltip.tsx`、`popover-morph.tsx` 都**阻塞在 solid-ark 上**——
+首批 5 个机器不到位，Wave 2 只能推进不依赖 headless 的那部分。`Input`/`Button` 不受影响，
+它们变成原生元素。
 
 **Wave 3 — 树与命令面板**（`components/tree/` 4 文件 + `components/palette/` 1 文件）
 
 `trees-file-tree.tsx`（522 行，`@pierre/trees` 宿主）、`PinnedNotes`、`FolderMorphIcon`、
 `RenameInput`、`CommandPalette`（314 行，cmdk 宿主）。
+
+`CommandPalette` 阻塞在 solid-ark 的 combobox 上。
 
 两个都是第三方 vanilla runtime 的宿主，重点是生命周期与 ref 接线，不是渲染逻辑。
 backlog 里 `@pierre/trees` 声明 React peers 却要跑 vanilla 的那条待验证项，在这个 wave 一并
@@ -238,7 +287,8 @@ Solid 2 从 beta.15 到 rc.0 用了约五周、二十个版本，节奏是两天
 | Solid 1.x 生态包在 2.0 运行时坏掉 | Phase 0 每个候选的三选一结论 | 门禁不过不进 Wave 1 |
 | 机械翻译 hooks 产出「能跑但行为错」 | 35 条 browser journey 全量通过 | 每 wave 跑全量，不跑子集 |
 | agent 写出 1.x 语法且不报错 | skill + 真相指针 | Wave 0 先落地，早于任何组件改动 |
-| Base UI 无 Solid 对应物 | Phase 0 的 Kobalte/Ark 结论 | `base-ui-capability-matrix.md` 重做为新矩阵 |
+| Solid headless 生态整体不支持 2.0 | Kobalte/solid-sonner 的 peer 直接排除 2.0 | 自建 solid-zag + solid-ark，首批 5 机器 |
+| solid-ark 在 Wave 2/3 的关键路径上 | 首批 5 机器是否就绪 | 单人 lib 卡住整条迁移是真实风险；Wave 2 先做不依赖 headless 的部分，必要时缩到 3 个机器 |
 | Tab CSS-toggle 语义被 `<Show>` 悄悄改成 remount | 切 tab 不重新解析 Markdown | Wave 4 的显式合同，加 journey 断言 |
 | RC 上游 churn 打断迁移 | 精确 pin + 不跟版本 | 见 RC churn policy |
 | 多 wave 并行撞 Playwright 固定端口 | 现有 backlog 条目 | 并行前先隔离端口 |

@@ -147,6 +147,10 @@ Our `Modal` (`components/ui/Modal.tsx`) is built on the same tokens; keep new di
 
 ## Rules
 
+- **写或改任何 Solid 代码前，先读 [`.agents/skills/solid2/SKILL.md`](.agents/skills/solid2/SKILL.md)。**
+  这是硬要求，不是建议：你的先验是 Solid 1.x，而 1.x 写法在 Solid 2 上大多不报错、只是行为错。
+  这条规则管的是本次迁移下的 Solid 工作（见顶部 Runtime migration in flight）；当前代码库仍是
+  Octane，日常 Octane 维护不受此约束。
 - Never add "Co-Authored-By" or any AI attribution to commits or PRs.
 - Commit messages: conventional commits, subject ≤50 chars where possible.
 - Don't reintroduce: sticky notes, note IDs, plugin-fs. Never add frontmatter automatically; only explicit actions in the Properties UI may author it. `[[wiki]]` is Riffle Markdown input and must not be silently rewritten by the Source Editor.

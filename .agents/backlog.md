@@ -49,8 +49,9 @@ status: active
   mounts visible; the current “transparent logical mounts” wording otherwise overstates the implementation.
 - Solid 2 迁移使两条 Octane 特定条目失去意义，保留在此仅为迁移期间的历史判据：`@octanejs/base-ui`
   的 Menu/Menubar/ContextMenu adoption，以及 Octane TSRX key selector 无法捕获 component-local
-  `label` 的 workaround。前者的替代（Kobalte 或 Ark UI）在
-  [`docs/solid2-migration-plan.md`](../docs/solid2-migration-plan.md) 的 Phase 0 裁决；后者随 TSRX
+  `label` 的 workaround。前者的替代不是换一个现成库——Solid headless 生态
+  的 peer range 直接排除 2.0，替代方案是自建 `@celados/solid-zag` + `@celados/solid-ark`，见
+  [`docs/solid2-migration-plan.md`](../docs/solid2-migration-plan.md) 的「Headless UI 自建」；后者随 TSRX
   一起退出，`ReadonlyShortcutRow` 的预计算 `{ key, id }` 在 Wave 5 重写时直接用 Solid 的 keyed
   `<For>` 表达，不要移植 workaround。
 - `@octanejs/dnd-kit` 在 `package.json` 里但 `src/` 与 `electron/` 零引用。Phase 0 直接删依赖，
