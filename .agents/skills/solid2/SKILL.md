@@ -142,9 +142,13 @@ into a `const` at the top of the body freezes it.
 
 ## Testing reactive behavior
 
-`await flush()` once is not enough when the change travels through a state machine or any
-chain that writes during its own settle. The DOM converges after the second flush; asserting
-after one reads stale values and looks like a broken subscription. Flush twice by default.
+One `await flush()` is enough for ordinary reactive chains — including an effect whose
+effect phase writes another signal. It is **not** enough for changes travelling through a
+Zag state machine: those converge on the second flush, and an assertion after the first
+reads a stale value that looks exactly like a lost subscription.
+
+Don't flush twice by reflex. When an assertion reads stale, add a flush first to find out
+whether the chain simply settles late, before you go hunting for a broken subscription.
 
 ## Riffle-specific contracts
 
