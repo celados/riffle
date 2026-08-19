@@ -6,7 +6,7 @@ description: >
   Solid-1.x-era 依赖能否在 2.0 存活，再按 store → 叶子 → 功能簇 → 外壳的依赖方向
   逐 wave 重写 47 个 render 文件，并把 agent 的真相指针从 Octane 翻到 Solid 2 RFC。
 status: draft # draft | accepted | in-progress | completed
-version: 0.3
+version: 0.4
 generated: { by: claude-code/opus-5, at: '2026-08-19T00:00:00+08:00' }
 resource: ./adr/0003-adopt-solid-2-as-the-renderer-runtime.md
 supersedes:
@@ -51,7 +51,7 @@ Renderer runtime 换成 `solid-js@2.0.0-rc.0`，语法层写标准 Solid TSX。�
 | --- | --- | --- | --- |
 | 反应式语义 | Octane React-hooks，组件重跑 | Solid 2 signals，setup-once | **逐处重想**，343 个调用点 |
 | 状态容器 | `@octanejs/zustand`（8 store） | `createStore` / signals + `createRoot` | 重写；module singleton 需显式 owner |
-| Headless UI | `@octanejs/base-ui`（5 文件） | 自建 `@celados/solid-zag` + `@celados/solid-ark` | 见「Headless UI 自建」 |
+| Headless UI | `@octanejs/base-ui`（5 文件） | 自建 `@celados/solid-ark`（zag v2） | 见「Headless UI 自建」 |
 | Motion | `@octanejs/motion`（15 文件） | `solid-motionone` | 上游 2025-04 起未更新 |
 | Toast | `@octanejs/sonner`（15 文件） | `solid-sonner` | 活跃（0.3.2 / 2026-08-16） |
 | 数据获取 | `@octanejs/tanstack-query`（2 文件） | `@tanstack/solid-query` | 活跃，但 Solid 2 兼容待验 |
@@ -100,18 +100,22 @@ Solid 2 上没有可直接消费的第三方 UI / 状态生态，替代路径全
 - command palette 与 headless：solid-ark。
 - `@octanejs/dnd-kit` 零使用，直接从 `package.json` 删除。
 
-### solid-zag 地基验证 — 已通过
+### 绑定层地基验证 — 已通过
 
 自建路线唯一的真实未知是「Zag 机器能不能在 Solid 2 上跑」。已验证：**能**。
 
-`.scratch/solid2-spike/` 把 `@zag-js/solid@1.43.1` 移植到 Solid 2 RC，dialog 与 menu 两台
-机器的完整交互链（trigger → transition → DOM）跑通，且 machine 建立过程零 strict-read
-警告。移植改动只有四处，全部记在该目录的 `SPIKE.md`：`onMount`/`mergeProps` 换名、
-`createEffect` 改两相形式、初始化期的 reactive 读显式 `untrack`、effect 回调不能有返回值。
+`.scratch/solid2-spike/` 把 zag v2 的 solid 绑定移植到 Solid 2 RC，基线
+`solid-js@2.0.0-rc.0` + `@zag-js/*@2.0.0-next.1`：dialog 与 menu 两台机器的完整交互链
+（trigger → transition → DOM）跑通，machine 建立过程零 strict-read 警告，v2 的声明式
+layer metadata 也验证成立。移植改动只有四处，全部记在该目录的 `SPIKE.md`：
+`onMount`/`mergeProps` 换名、`createEffect` 改两相形式、初始化期的 reactive 读显式
+`untrack`、effect 回调不能有返回值。
 
-这份代码是 `@celados/solid-zag` 的第一版实现，repo 建立后直接搬——不要从上游重拷。
+同样四处改动在 zag 1.43 上也跑通过，所以 1.43 是一条已验证的 fallback。
+
+这份代码是 solid-ark 绑定层的第一版实现，repo 建立后直接搬——不要从上游重拷。
 未覆盖的是 presence（退出动画）、focus trap、嵌套机器（menu 的 submenu）和 SSR，
-它们属于 solid-ark 的 class-(b) 面。
+它们属于 class-(b) 面。
 
 **门禁状态**：地基已过。Wave 1（状态层）可以开始——它不依赖 headless 层。
 
@@ -123,13 +127,18 @@ Solid 的 headless 生态在 2.0 上不是「需要验证」，是**装不上**�
 `menu-root.tsx`——后者正是 Riffle 需要的 menu），`<Index>` 有 12 个文件在用，这两个 API 在
 Solid 2 都不存在。
 
-所以 headless 层自建，分两个包，形状照搬
-`projects/ripple-ark`（同一套设计已在 Ripple 上跑通并发布到
-`npm.celados.com`）：
+所以 headless 层自建：**单包** `@celados/solid-ark`，Zag 绑定层与 Ark 组件词汇表同仓
+（绑定层只有约 600 行，独立成包换不来什么却要付一份发布与版本对齐的代价）。设计照搬
+`projects/ripple-ark`——同一套设计已在 Ripple 上跑通并发布到 `npm.celados.com`。
 
-- `@celados/solid-zag` — Zag core 的 Solid 2 绑定：`normalizeProps` + `useMachine`。
-- `@celados/solid-ark` — Ark 的 compound 组件词汇表（`Root`/`Trigger`/`Content`/context），
-  由 codegen 从 Ark 上游生成。
+基线是 **zag v2**（`2.0.0-next.1`）而不是 1.43：v2 把 layer-stack 元数据从命令式 DOM
+stamping 移进 machine 的 connect props，正是 celados 给 1.x 提的
+[zag#3269](https://github.com/chakra-ui/zag/pull/3269) 被上游以「v2 会声明式处理」为由
+关闭的那处缺陷。在 1.43 上做等于把缺陷连同 workaround 一起继承。
+
+Ark 上游（`@ark-ui/solid@5.38.2`）仍在 zag 1.43 且没有 v2 分支，所以它这一轮是**词汇表
+参照**而非 codegen 输入：行为以 zag v2 的 connect API 为准，compound 结构与命名照 Ark 抄。
+首批的 class-(a) 声明表手写；Ark 出 v2 后再恢复 codegen。
 
 两条既定合同直接沿用，不重新讨论：
 
@@ -159,7 +168,8 @@ Solid 2 都不存在。
 `create-machine.ts` 和这套分类法是可复用资产；per-target 重写的是 emit 模板、
 binding-runtime 的框架接触面和 class-(b) override。
 
-Zag 版本先与 ripple-ark 对齐在 `^1.43.0`，除非有明确理由才独立升。
+完整的 project 设计（首批范围、v2 影响面、codegen 回归条件、双 pre-release 的 churn 政策）
+见 workspace `knowledge/solid-ark-project.md`。
 
 ## Wave 清单
 
@@ -305,7 +315,7 @@ Solid 2 从 beta.15 到 rc.0 用了约五周、二十个版本，节奏是两天
 | Solid 1.x 生态包在 2.0 运行时坏掉 | Phase 0 每个候选的三选一结论 | 门禁不过不进 Wave 1 |
 | 机械翻译 hooks 产出「能跑但行为错」 | 35 条 browser journey 全量通过 | 每 wave 跑全量，不跑子集 |
 | agent 写出 1.x 语法且不报错 | skill + 真相指针 | Wave 0 先落地，早于任何组件改动 |
-| Solid headless 生态整体不支持 2.0 | Kobalte/solid-sonner 的 peer 直接排除 2.0 | 自建 solid-zag + solid-ark，首批 5 机器 |
+| Solid headless 生态整体不支持 2.0 | Kobalte/solid-sonner 的 peer 直接排除 2.0 | 自建 solid-ark（zag v2），首批 5 机器 |
 | solid-ark 在 Wave 2/3 的关键路径上 | 首批 5 机器是否就绪 | 单人 lib 卡住整条迁移是真实风险；Wave 2 先做不依赖 headless 的部分，必要时缩到 3 个机器 |
 | Tab CSS-toggle 语义被 `<Show>` 悄悄改成 remount | 切 tab 不重新解析 Markdown | Wave 4 的显式合同，加 journey 断言 |
 | RC 上游 churn 打断迁移 | 精确 pin + 不跟版本 | 见 RC churn policy |
