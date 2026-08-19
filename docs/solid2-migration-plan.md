@@ -6,7 +6,7 @@ description: >
   Solid-1.x-era 依赖能否在 2.0 存活，再按 store → 叶子 → 功能簇 → 外壳的依赖方向
   逐 wave 重写 47 个 render 文件，并把 agent 的真相指针从 Octane 翻到 Solid 2 RFC。
 status: draft # draft | accepted | in-progress | completed
-version: 0.5
+version: 0.6
 generated: { by: claude-code/opus-5, at: '2026-08-19T00:00:00+08:00' }
 resource: ./adr/0003-adopt-solid-2-as-the-renderer-runtime.md
 supersedes:
@@ -113,7 +113,11 @@ layer metadata 也验证成立。移植改动只有四处，全部记在该目�
 
 同样四处改动在 zag 1.43 上也跑通过，所以 1.43 是一条已验证的 fallback。
 
-这份代码是 solid-ark 绑定层的第一版实现，repo 建立后直接搬——不要从上游重拷。
+这份代码已经搬进 `projects/solid-ark`（`src/zag/`），spike 目录仅作历史记录保留。
+搬迁时 typecheck 又抓出三处运行时测不到的问题，已记在该仓库的 `docs/upgrade.md`：
+JSX 来自 `@solidjs/web` 而非 `solid-js`、`createSignal` 的泛型摩擦、zag v2 分支领先于
+发布的 next.1。
+
 未覆盖的是 presence（退出动画）、focus trap、嵌套机器（menu 的 submenu）和 SSR，
 它们属于 class-(b) 面。
 
