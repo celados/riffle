@@ -2,20 +2,24 @@
 type: Evaluation
 title: Riffle Markdown renderer evaluation
 description: >
-  评估删除 Tiptap 后的只读 Markdown 渲染与 agent 流式输出方案，并判断 Comark 是否是 Riffle 当前的最佳选择。
+  评估删除 Tiptap 后的只读 Markdown 渲染、未来 agent 流式输出方案与 Markstream follow-up，
+  并判断 Comark 是否仍是 Riffle 当前的最佳选择。
 status: completed
-generated: { by: codex/gpt-5, at: 2026-08-05T11:45:00+08:00 }
-tags: [markdown, streaming, comark, streamdown, octane, renderer]
+version: 1.1
+generated: { by: codex/gpt-5, at: 2026-08-22T17:06:01+08:00 }
+tags: [markdown, streaming, comark, markstream, streamdown, solid2, renderer]
 ---
 
 # Riffle Markdown renderer evaluation
 
 ## Verdict
 
-**在 Octane 是短中期基座、Ripple 是长期目标的约束下，Comark 已通过受控 prototype，确定为当前采用方向。**
-Comark 自己把 Markdown 解析成框架无关的 document AST；该 AST 与 Octane 或 Ripple 的编译器 AST
+**在产品早期以一次性渲染为主、renderer 正从 Octane 迁往 Solid 2 的约束下，Comark 继续作为当前采用方向。**
+Comark 自己把 Markdown 解析成框架无关的 document AST；该 AST 与 Octane 或 Solid 的编译器 AST
 没有关系。Riffle 需要维护的是把 Comark document nodes 投影成当前 UI framework elements 的薄 view adapter：
-今天是 Octane，迁移后是 Ripple。parser、stream session、安全策略和产品 URL 语义不随 UI framework 更换。
+今天是 Octane，迁移后是 Solid 2。parser、未来的 stream session、安全策略和产品 URL 语义不随 UI framework 更换。
+原评估使用 Ripple 作为长期目标；[ADR 0003](./adr/0003-adopt-solid-2-as-the-renderer-runtime.md) 后继裁决为
+Solid 2，但这次 runtime 变化只增强了 framework-neutral seam 的必要性，没有推翻 parser 选型。
 
 [`@octanejs/streamdown`](https://github.com/octanejs/octane/tree/main/packages/streamdown) 仍是短期接入成本最低、
 验证流式 UX 最快的候选，但它的主要优势来自 Octane binding；既然 Octane 不是长期架构约束，这项便利不应主导
@@ -28,12 +32,13 @@ Comark 自己把 Markdown 解析成框架无关的 document AST；该 AST 与 Oc
 ## Decision drivers
 
 1. 静态 vault 文档必须正确渲染 CommonMark/GFM，并保留 Riffle 自己的 note link、vault asset 和外链策略。
-2. agent 输出以“不断增长的累计 Markdown 字符串”进入 UI；未闭合的 fence、inline marker、表格、链接和
-   frontmatter 不应让当前帧崩坏。
+2. 产品早期默认一次性渲染完整 Note body，不为尚未交付的 agent streaming consumer 扩大 runtime；未来 agent
+   输出若以“不断增长的累计 Markdown 字符串”进入 UI，未闭合的 fence、inline marker、表格、链接和 frontmatter
+   仍不应让当前帧崩坏。
 3. renderer 必须是只读边界。不得为了渲染重新引入编辑器 transaction、selection、schema 或序列化模型。
 4. Markdown 和其中的 HTML、链接、图片均按可携带主动内容的数据处理；Readonly View 支持受约束的 Embedded
    Markup，但不授予其应用代码权限。
-5. Riffle 当前使用 Octane，但长期倾向迁移到 Ripple；parser 与产品策略必须独立于二者，framework adapter 应可替换。
+5. Riffle 当前使用 Octane，已裁决迁移到 Solid 2；parser 与产品策略必须独立于二者，framework adapter 应可替换。
 6. 稳定块应尽量保留 DOM identity，避免流式输出期间选区、复制和滚动锚点持续抖动。
 7. 本轮 Riffle Markdown contract 是 CommonMark/GFM、wiki links、Vault assets 与 Embedded Markup；不借 renderer
    迁移加入 Comark components、MDX、Mermaid、math 或 agent-native UI components。
@@ -349,6 +354,66 @@ hash 只标识该次可复核构建：baseline 为 `AppShell-BQykB3rl.js` / `ind
 为 `AppShell-B_08HyHT.js` / `index-D5fQd2TK.css`。最终依赖图保留 direct `comark@0.6.0`，且
 `pnpm why @tiptap/core` 无结果；dependency/source gate 同时锁住 package manifest、lockfile、active
 source/config 与已废弃 editor module paths。
+
+## Markstream follow-up (2026-08-22)
+
+本节记录对 [`Simon-He95/markstream-vue`](https://github.com/Simon-He95/markstream-vue) 的后续评估。
+检查基于 upstream commit
+[`02d8bbaa9b1b4e2e9a99ce19a2ed23844946b75c`](https://github.com/Simon-He95/markstream-vue/tree/02d8bbaa9b1b4e2e9a99ce19a2ed23844946b75c)，
+当时 npm stable line 为 `markstream-vue@2.0.1`、`markstream-core@2.0.1`、
+`stream-markdown-parser@1.2.9`，仓库 root 已进入 `2.0.2-beta.0`。版本与体积事实是该日快照，未来采用前必须重查。
+
+### Architecture finding
+
+Markstream 已经不是纯 Vue library，但也不是一个 `core + thin framework binding` 的完整实现：
+
+| Layer | Package | Responsibility | Riffle assessment |
+| --- | --- | --- | --- |
+| Parsing | [`stream-markdown-parser`](https://github.com/Simon-He95/markstream-vue/tree/02d8bbaa9b1b4e2e9a99ce19a2ed23844946b75c/packages/markdown-parser) | framework-neutral Markdown-it based parser、自定义 structured nodes、stream/final mode、stable top-level node reuse、source map | 是真实可独立采用的 parser，但 surface 明显大于 Riffle 当前 Markdown contract |
+| Stream pacing | [`markstream-core`](https://github.com/Simon-He95/markstream-vue/tree/02d8bbaa9b1b4e2e9a99ce19a2ed23844946b75c/packages/markstream-core) | framework-neutral smooth stream controller、append detection、fence-safe reveal、diff/language helpers | 边界最干净；未来 agent stream 可优先单独 spike |
+| View adapters | Vue 3 / React / Svelte / Angular / Vue 2 / [`Octane`](https://github.com/Simon-He95/markstream-vue/tree/02d8bbaa9b1b4e2e9a99ce19a2ed23844946b75c/packages/markstream-octane) | 完整 component tree、HTML policy、code diff、Mermaid、KaTeX、D2、Infographic、workers、virtualization | 不是薄 binding；没有 Solid adapter，完整移植会把大量产品能力及维护面带入 Riffle |
+
+`markstream-core` 的名字容易造成误读：它不拥有 Markdown parser 或 framework-neutral render tree；parser 是另一个包，
+而高级 block 生命周期和大部分 rendering policy 仍由每个 framework adapter 实现。Riffle 若只接 parser，工作量可控；
+若要获得完整 Markstream UX，就需要编写并长期维护 Solid adapter，不能按“换一个 parser dependency”估算。
+
+### Capability versus architectural fit
+
+Markstream 作为完整的 AI streaming Markdown renderer 明显比 Comark 丰富：它已经覆盖流式代码 diff、渐进 Mermaid/KaTeX、
+长文档 live-node bounding、worker、source map、custom components 和多框架 smoke/security gates。这些是可信的未来候选能力，
+但不是 Riffle 早期 Note view 的当前需求。
+
+它没有成为当前更好 core replacement，原因如下：
+
+- Riffle 早期主要对完整 Note body 做一次性 parse；尚无真实 consumer 支撑引入 stream pacing、heavy blocks 或 virtualization。
+- `stream-markdown-parser` 为处理中间态、math、HTML 和 custom tags 带有较多 heuristic transform；能力更宽，也扩大了语义与回归面。
+- 2026-08-22 registry `dist.unpackedSize` 快照约为 parser 3.36 MB、Comark 0.51 MB。这不是应用 bundle 证据，
+  但足以说明 parser-only adoption 也不是无成本替换，必须另做相同 toolchain 的 bundle measurement。
+- Markstream `safe` policy 仍允许普通 HTTP/HTTPS links 和 images；Riffle 必须继续执行自己的 Vault asset、trusted external
+  navigation 与 remote/data/file resource policy，不能把 adapter 默认安全策略当成产品合同。
+- Riffle 已经把 Comark AST 收敛到 module-private [`ProjectedNode`](../src/markdown/riffle-markdown.ts)；替换 parser
+  不会消除这层产品语义投影，只会更换它的内部输入 AST。
+
+### Decision
+
+当前 stack decision 不变：
+
+1. Note Markdown View 保留 Comark，并继续使用无历史状态的完整 document parse。
+2. 不添加 Markstream dependency，不移植 `markstream-octane`，也不因 upstream 的完整 feature set 扩大 Riffle Markdown contract。
+3. 将 Markstream 记录为未来 `AgentMarkdownStream` 的首要候选，而不是静态 Note renderer 的直接替代。
+4. 若真实 agent streaming consumer 出现，先单独 spike `markstream-core`；只有它不足以满足需求时，才让
+   `stream-markdown-parser` 在既有 `ProjectedDocument` seam 后与 Comark 做 differential prototype。
+5. 无论内部 parser 是什么，其 AST、plugins 与 stream session 都不得进入 store、IPC、persistence 或 public fixture schema。
+
+以下任一条件出现时可重开评估：
+
+- 产品交付持续更新的 agent Markdown，并需要明确的 pacing、pause、flush 或 correction semantics；
+- 真实内容需要渐进 Mermaid/KaTeX、streaming diff、source map 或 renderer-owned long-document virtualization；
+- Comark 触发下述 fallback condition，且问题无法在 module-private adapter 内干净隔离；
+- Markstream 发布经过验证的 Solid 2 adapter，或把高级 block lifecycle 收敛为足够窄的 framework-neutral contract。
+
+重开时必须复用 Riffle corpus，验证 static/final equivalence、non-prefix correction、stable DOM identity、selection/scroll、
+Embedded Markup negative corpus、Vault URL/resource policy，以及相同 toolchain 下的 10/100/500 KiB latency、heap 和 bundle。
 
 ## Fallback conditions for Streamdown
 
