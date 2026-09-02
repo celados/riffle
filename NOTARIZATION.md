@@ -28,7 +28,7 @@ must copy the managed template, then render its sibling `.npmrc` before install:
 
 ```bash
 cp "$HOME/.agents/.skills/celados/agents/publish-package/resources/.npmrc.tpl" .npmrc.tpl
-hq secret.render "{ file: '.npmrc.tpl' }"
+latch render "{ file: '.npmrc.tpl', format: 'raw' }"
 pnpm install --frozen-lockfile
 pnpm test
 pnpm run package:test

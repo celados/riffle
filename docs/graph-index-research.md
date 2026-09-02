@@ -4,12 +4,14 @@ title: Graph index for Riffle — 图索引选型调研与架构建议
 description: >
   面向 Agent context 摄取的图索引调研:大厂开源引擎、Agent memory 社区项目、
   嵌入式图存储与本地笔记软件先例三条线的结论,以及 SQLite 边表投影方案的落地建议。
+  Hypatia 作为后续语义检索架构参考记录在内。
 status: draft
-version: 0.1
-generated: { by: grok-build/ox-alpha, at: 2026-08-22T00:00:00+08:00 }
+version: 0.2
+generated: { by: codex/gpt-5, at: 2026-09-02T18:52:26+08:00 }
 resource:
   - ./v2-engine-architecture.md
   - ./source-adapters.md
+  - https://github.com/MarchLiu/hypatia
 tags: [riffle, v2, graph, search, agent-context, sqlite]
 ---
 
@@ -46,7 +48,7 @@ k 跳邻居展开用递归 CTE(万级节点实测毫秒级),向量召回用 sqli
 
 结论:大厂在这个问题域给出的都是重型基础设施,personal knowledge 场景没有先例。用户的印象"阿里开源了类似索引引擎"对应的正是 GraphScope/TuGraph 一族,它们是分布式图计算系统,与桌面嵌入式场景完全错位。
 
-## 第二线:Agent memory 社区项目 — 全 Python 生态,思想可移植
+## 第二线:Agent memory 社区项目 — 生态碎片化,思想可移植
 
 | 项目 | 关键事实 | 裁决 | 来源 |
 | --- | --- | --- | --- |
@@ -55,6 +57,9 @@ k 跳邻居展开用递归 CTE(万级节点实测毫秒级),向量召回用 sqli
 | HKUDS/LightRAG (39.1k★, MIT) | 每 chunk 一次 LLM 调用抽取;upsert 合并同名实体;按文档删除派生数据 | 思想最契合、实现不适配 | github.com/HKUDS/LightRAG |
 | mem0ai/mem0 (63.8k★) | **v3 起 graph memory 从 OSS 移除、收进商业平台**,无 OSS 替代 | 不适配(OSS 已无图);三信号融合检索可抄 | docs.mem0.ai/open-source/graph-memory.md |
 | basicmachines-co/basic-memory (3.7k★, AGPL) | Markdown 真源 + 文件监听 sync 到 SQLite + MCP;零 LLM 抽取,图完全来自 wikilink | **与 Riffle 投影哲学同构的方向验证**;其未做隐式语义层 = Riffle 差异化空间 | github.com/basicmachines-co/basic-memory |
+| MarchLiu/hypatia (235★, MIT; inspected @ `862bef1`, 2026-09-02) | Rust agent-memory CLI;v0.3 为单 SQLite 源真相 + FTS5/JSON 倒排/HRT 三元组/JSE/递归 CTE k-hop,向量 BLOB 为 truth、usearch 为可重建缓存;jieba 预分词支持中文 | **不作为 runtime 依赖**;作为语义检索架构参考。其 shelf/name/triple identity 与多 agent 直写模型,和 Riffle 的 Vault path、watch reconciliation、single Engine owner 不一致 | github.com/MarchLiu/hypatia |
+
+Hypatia 的价值在于把 FTS、向量、JSON 字段过滤和 k-hop 图遍历组合成可运行的 agent-memory 系统。Riffle 不应复制它的存储所有权:Markdown Vault 仍是源真相,Hypatia 式能力应落成 Engine SQLite 的 rebuildable projection,并把每条语义边绑定到 `source_path + source_rev`。另外其 README 仍描述 DuckDB+SQLite 双库,而 v0.3 设计/代码已切到单 SQLite;引用时以源码和 `docs/sqlite-refactor-plan.md` 为准。
 
 ## 第三线:嵌入式存储与笔记软件先例 — 行业已收敛于 SQLite
 
@@ -120,6 +125,8 @@ seed 概念 → FTS 命中实体/别名 → 递归 CTE 取 1–2 跳邻域 → �
 4. **增量 upsert 抽取**(LlamaIndex:"all inserts are already upserts")。
 5. **多信号融合**(mem0 v3 / graphiti):FTS5 + sqlite-vec + 实体命中三路召回 RRF 融合。
 6. **分层成本控制**(basic-memory / LightRAG):显式层零 LLM 成本先行;语义层每 chunk 单次便宜模型调用,结果按 chunk hash 缓存,文件未变不重复计费。
+7. **中文 FTS 前置分词**(hypatia):写入和查询前用 jieba `cut_for_search` 为 CJK 词加空格,再交给 `porter unicode61`;Riffle 的中文语料检索应单独验证这条机制。
+8. **结构化查询面**(hypatia):JSE 展示了 agent 可靠表达 `$and/$or/$search/$similar/$triple/$k-hop` 的价值;Riffle 应借语义而非直接采纳第二套查询协议,避免与 versioned Engine protocol 竞争。
 
 ## 开放架构的态度
 
@@ -133,4 +140,4 @@ seed 概念 → FTS 命中实体/别名 → 递归 CTE 取 1–2 跳邻域 → �
 
 # Sources
 
-各节表格内已附主来源。补充:Kùzu 收购报道(betanews/The Register 2025-10);Logseq DB 版 PR#10639 与 deepwiki 架构页;思源内核架构(siyuannote.com/article/1724743405);sqlite-vec macOS 坑(github.com/asg017/sqlite-vec#78);10k BFS 基准(oldnordic/sqlitegraph BENCHMARK_REPORT.md);递归 CTE 工程指南(mako.ai/guides/sqlite/common-table-expressions-advanced)。
+各节表格内已附主来源。补充:Hypatia 源码快照 `862bef14475d161efdd72d4c530b00d173544bb3` 与其 `docs/sqlite-refactor-plan.md`;Kùzu 收购报道(betanews/The Register 2025-10);Logseq DB 版 PR#10639 与 deepwiki 架构页;思源内核架构(siyuannote.com/article/1724743405);sqlite-vec macOS 坑(github.com/asg017/sqlite-vec#78);10k BFS 基准(oldnordic/sqlitegraph BENCHMARK_REPORT.md);递归 CTE 工程指南(mako.ai/guides/sqlite/common-table-expressions-advanced)。
